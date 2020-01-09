@@ -40,27 +40,34 @@ void getBoard(Board board);
 float evaluate(Board board);
 void gainTree();
 bool checkNewGame(Board board);
-
+// int alpha, beta;
 class gameMove{
     private:
         int _row;
         int _col;
         int _turn; // 1: your turn, -1: enermy's turn
         float _score;
+        float _alpha  ;
+        float _beta ;
     public:
-        gameMove():_row(-1),_col(-1),_turn(1),_score(0){};
-        gameMove(int row, int col, int turn):_row(row),_col(col),_turn(turn){};
+        gameMove():_row(-1),_col(-1),_turn(1),_score(0), _alpha(-(INF+1)), _beta(INF+1){};
+        gameMove(int row, int col, int turn):_row(row),_col(col),_turn(turn),_score(0), _alpha(-(INF+1)), _beta(INF+1){};
         gameMove** children;
         int getRow(){return _row;};
         int getCol(){return _col;};
         int getTurn(){return _turn;};
+        float getAlpha(){return _alpha;};
+        float getBeta(){return _beta;};
         float getScore(){return _score;};
         void setRow(int row){_row = row;};
         void setCol(int col){_col = col;};
         void setTurn(int turn){_turn = turn;};
         void setScore(float score){_score = score;};
+        void setAlpha(float alpha){_alpha = alpha;};
+        void setBeta(float beta){_beta = beta;};
         void evaluateScore(Board board){_score = evaluate(board);};
-        void changeTurn(){_turn = -_turn;};        
+        void changeTurn(){_turn = -_turn;};      
+          
 };
 int checkAllTheSameColor(Board board);//1: we win, 0 still play, -1 we lose
 // Returns the optimal value a maximizer can obtain. 
@@ -101,7 +108,7 @@ gameMove minimax(gameMove& currentMove, bool isMax, Board board, int turn, int h
             }
             return currentMove;
         }
-        else{ 
+        else{  //WIN or Lose the game
             int EndOfGame = checkAllTheSameColor(board);
             if(EndOfGame!=0){ 
                 currentMove.setScore(INF * EndOfGame);
@@ -136,15 +143,24 @@ gameMove minimax(gameMove& currentMove, bool isMax, Board board, int turn, int h
         // cout << "layer = " << depth << endl;
         for (int i = 0; i < ROW; i++){
             for(int j=0; j< COL; j++){
+                currentMove.children[i][j].setAlpha( currentMove.getAlpha());
+                currentMove.children[i][j].setBeta( currentMove.getBeta());
                 gameMove currentPredict =minimax(currentMove.children[i][j], false, board, -turn, h, depth+1);
                 // if (depth ==0){
                 //     printf("%4.2f  ", currentPredict.getScore());
                 // }
+                
                 if (max <  currentPredict.getScore()){
                     current = currentMove.children[i][j];
                     current.setScore(currentPredict.getScore());
                     max = current.getScore();
                     willLose = false;
+                    if (currentMove.getAlpha() < currentPredict.getScore()){
+                        currentMove.setAlpha( currentPredict.getScore()) ;
+                    }
+                    if(currentMove.getAlpha() > currentPredict.getBeta()){
+                        return current;
+                    }
                 }
             }
             // if (depth ==0){
@@ -169,10 +185,19 @@ gameMove minimax(gameMove& currentMove, bool isMax, Board board, int turn, int h
                 gameMove currentPredict =minimax(currentMove.children[i][j], true, board,-turn, h,depth+1);
                 // cout << currentPredict.getScore() << " ";
                 // cout << min << "> " << currentPredict.getScore() << "?" << endl;
+                
                 if (min > currentPredict.getScore()){
                     current = currentMove.children[i][j];
                     current.setScore(currentPredict.getScore());
                     min = current.getScore();
+
+                    if (currentMove.getBeta() > currentPredict.getScore()){
+                        currentMove.setBeta( currentPredict.getScore()) ;
+                    }
+                    if(currentMove.getAlpha() > currentPredict.getBeta()){
+                        return current;
+                    }
+                    
                 }
             }
             // cout <<endl;
@@ -312,14 +337,13 @@ void algorithm_A(Board board, Player player, int index[]){
     int row, col;
     float score;
     color = player.get_color();
-    cout << player.get_color() << endl;
+    // cout << player.get_color() << endl;
     int i; int j;
     // Board boardForPredict = board;
+
     if (checkNewGame(board)){
-        row = rand() % 5;
-        col = rand() % 6;
-    //     // row = 0;
-    //     // col = 4;
+        row = 5* rand() % 2;
+        col = 6* rand() % 2;
     }
     else{
         gameMove Next;
@@ -334,7 +358,7 @@ void algorithm_A(Board board, Player player, int index[]){
     index[0] = row;
     index[1] = col;
     
-    cout << "next: " << row <<", " << col << " Score = " << score << endl;
+    // cout << "next: " << row <<", " << col << " Score = " << score << endl;
     //system("pause");
 }
 // */
