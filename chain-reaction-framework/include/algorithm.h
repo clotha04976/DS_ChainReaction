@@ -5,7 +5,7 @@
 
 // The algorithm that you need to implement
 void algorithm_A(Board board, Player player, int index[]);
-
+void algorithm_A_plus(Board board, Player player, int index[]);
 // The algorithm provided by TAs.
 void algorithm_B(Board board, Player player, int index[]);
 void algorithm_C(Board board, Player player, int index[]);

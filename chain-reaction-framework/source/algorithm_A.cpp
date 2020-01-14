@@ -1,4 +1,3 @@
-
 #include <iostream>
 #include <stdlib.h>
 #include <time.h>
@@ -6,12 +5,11 @@
 #include "../include/board.h"
 #include "../include/player.h"
 #include "../include/rules.h"
-#include <stdlib.h>
 #define ROW 5
 #define COL 6
 #define INF 999
+#define ILLEGAL_SCORE 1000
 using namespace std;
-
 /******************************************************
  * In your algorithm, you can just use the the funcitons
  * listed by TA to get the board information.(functions 
@@ -37,9 +35,10 @@ char color;
 Player predict_red_player(RED);
 Player predict_blue_player(BLUE);
 void getBoard(Board board);
-float evaluate(Board board);
+float evaluate(Board board, int nextTurn);
+float evaluate2(Board board);
 void gainTree();
-bool checkNewGame(Board board);
+bool isNewGame(Board board);
 // int alpha, beta;
 class gameMove{
     private:
@@ -65,11 +64,48 @@ class gameMove{
         void setScore(float score){_score = score;};
         void setAlpha(float alpha){_alpha = alpha;};
         void setBeta(float beta){_beta = beta;};
-        void evaluateScore(Board board){_score = evaluate(board);};
-        void changeTurn(){_turn = -_turn;};      
-          
+        void evaluateScore(Board board, int nextTurn){_score = evaluate(board, nextTurn);};
+        void changeTurn(){_turn = -_turn;};              
 };
 int checkAllTheSameColor(Board board);//1: we win, 0 still play, -1 we lose
+
+bool isRoot(gameMove current){
+    return (current.getCol() == -1 || current.getRow() == -1);
+}
+bool renewBoard(Board* board, gameMove currentMove, int turn){
+    bool isLegal = false;
+    if (turn == -1){  //Our turn
+        if (color == 'r'){ 
+            isLegal = board->place_orb(currentMove.getRow(), currentMove.getCol(), &predict_red_player);
+        }
+        else{
+            isLegal =board->place_orb(currentMove.getRow(), currentMove.getCol(), &predict_blue_player);
+        }
+    }
+    else{ //enemy's turn
+        if (color =='b'){//our color is blue
+            isLegal = board->place_orb(currentMove.getRow(), currentMove.getCol(), &predict_red_player);
+        }
+        else{
+            isLegal = board->place_orb(currentMove.getRow(), currentMove.getCol(), &predict_blue_player);
+        }
+    }
+    return isLegal;
+}
+bool isLeaf(int depth, int height){
+    return depth == height;
+}
+
+void childrenIniti(gameMove* currentMove){
+    currentMove->children = new gameMove*[ROW];
+    for (int i = 0 ; i <ROW; i++){
+        currentMove->children[i] = new gameMove[COL];
+        for (int j =0; j < COL ; j++){
+            currentMove->children[i][j].setRow(i);
+            currentMove->children[i][j].setCol(j);
+        }
+    }
+}
 // Returns the optimal value a maximizer can obtain. 
 // depth is current depth in game tree. 
 // nodeIndex is index of current node in scores[]. 
@@ -77,84 +113,43 @@ int checkAllTheSameColor(Board board);//1: we win, 0 still play, -1 we lose
 // of maximizer, else false 
 // scores[] stores leaves of Game tree. 
 // h is maximum height of Game tree 
-gameMove minimax(gameMove& currentMove, bool isMax, Board board, int turn, int h = 2,int depth = 0 ) {//turn = -1 is after enemy's turn 
-    
-    //renew the board
-    if (!(currentMove.getCol() == -1 || currentMove.getRow() == -1)){
-        bool flag = false;
-        // Player currentPlayer();
-        if (turn == -1){  //Our turn
-            if (color == 'r'){ 
-                flag = board.place_orb(currentMove.getRow(), currentMove.getCol(), &predict_red_player);
-            }
-            else{
-                flag =board.place_orb(currentMove.getRow(), currentMove.getCol(), &predict_blue_player);
-            }
-        }
-        else{ //enemy's turn
-            if (color =='b'){//our color is blue
-                flag = board.place_orb(currentMove.getRow(), currentMove.getCol(), &predict_red_player);
-            }
-            else{
-                flag = board.place_orb(currentMove.getRow(), currentMove.getCol(), &predict_blue_player);
-            }
-        }
-        if (!flag){ //put the wrong place
-            if (isMax){
-                currentMove.setScore(INF+1);
-            } 
-            else{
-                currentMove.setScore(-INF-1);
-            }
+gameMove minmax(gameMove& currentMove, bool isMax, Board board, int turn, int h = 2,int depth = 0) {//turn = -1 is after enemy's turn 
+    if (!isRoot(currentMove)){
+        bool isLegal = renewBoard(&board, currentMove, turn);
+        if (!isLegal){ //put the wrong place
+            if (isMax) currentMove.setScore(ILLEGAL_SCORE);
+            else       currentMove.setScore(-ILLEGAL_SCORE);
             return currentMove;
         }
-        else{  //WIN or Lose the game
+        else{  // is End of Game ?
             int EndOfGame = checkAllTheSameColor(board);
-            if(EndOfGame!=0){ 
+            if (EndOfGame == 1 || EndOfGame == -1){ 
                 currentMove.setScore(INF * EndOfGame);
                 return currentMove;
             }
         }
-        
     }
-    // Terminating condition. i.e leaf node is reached 
-    if (depth == h) {
-        currentMove.evaluateScore(board);
-        // board.print_current_board(currentMove.getRow(), currentMove.getCol(), 0);
-        // cout << "If next :" << currentMove.getRow() << ", " << currentMove.getCol() <<" Score = " << currentMove.getScore() << endl;
-        // system("pause");
+    // Terminating condition. leaf node is reached 
+    if (isLeaf(depth, h)){
+        currentMove.evaluateScore(board, -turn);
         return currentMove;
     }
     // initializing the current move
-    currentMove.children = new gameMove*[ROW];
-    for (int i = 0 ; i <ROW; i++){
-        currentMove.children[i] = new gameMove[COL];
-        for (int j =0; j < COL ; j++){
-            currentMove.children[i][j].setRow(i);
-            currentMove.children[i][j].setCol(j);
-            // currentMove.children[i][j].setTurn(-turn);
-        }
-    }
+    childrenIniti(&currentMove);
     //  If current move is maximizer, find the maximum attainable value 
+    gameMove current;
     if (isMax){
         float max = -INF-1;
-        bool willLose = true;
-        gameMove current;
-        // cout << "layer = " << depth << endl;
         for (int i = 0; i < ROW; i++){
             for(int j=0; j< COL; j++){
-                currentMove.children[i][j].setAlpha( currentMove.getAlpha());
-                currentMove.children[i][j].setBeta( currentMove.getBeta());
-                gameMove currentPredict =minimax(currentMove.children[i][j], false, board, -turn, h, depth+1);
-                // if (depth ==0){
-                //     printf("%4.2f  ", currentPredict.getScore());
-                // }
-                
+                currentMove.children[i][j].setAlpha(currentMove.getAlpha() );
+                currentMove.children[i][j].setBeta(currentMove.getBeta() );
+                gameMove currentPredict = minmax(currentMove.children[i][j], false, board, -turn, h, depth+1);
+                // if (depth ==0)  printf("%4.2f  ", currentPredict.getScore());
                 if (max <  currentPredict.getScore()){
                     current = currentMove.children[i][j];
                     current.setScore(currentPredict.getScore());
                     max = current.getScore();
-                    willLose = false;
                     if (currentMove.getAlpha() < currentPredict.getScore()){
                         currentMove.setAlpha( currentPredict.getScore()) ;
                     }
@@ -163,54 +158,32 @@ gameMove minimax(gameMove& currentMove, bool isMax, Board board, int turn, int h
                     }
                 }
             }
-            // if (depth ==0){
-            //     cout << endl;
-            // }
+            // if (depth ==0)  cout << endl;
         }
-        // if(willLose){
-        //     cout << "What ever the color:" << color <<" choose, it will lose. So sad." << endl;
-        //     h = 1;
-        //     goto predictAgain;
-        // }
-        // cout << "Max : " << current.getRow() << ", " << current.getCol() << endl;
-        return current; 
     }
-    // Else (If current move is Minimizer), find the minimum attainable value 
     else{
         float min = INF+1;
-        gameMove current;
-        // cout << "layer = " << depth << endl;
         for (int i = 0; i < ROW; i++){
             for(int j=0; j< COL; j++){
-                gameMove currentPredict =minimax(currentMove.children[i][j], true, board,-turn, h,depth+1);
-                // cout << currentPredict.getScore() << " ";
-                // cout << min << "> " << currentPredict.getScore() << "?" << endl;
-                
+                gameMove currentPredict =minmax(currentMove.children[i][j], true, board,-turn, h,depth+1);
                 if (min > currentPredict.getScore()){
                     current = currentMove.children[i][j];
                     current.setScore(currentPredict.getScore());
                     min = current.getScore();
-
                     if (currentMove.getBeta() > currentPredict.getScore()){
                         currentMove.setBeta( currentPredict.getScore()) ;
                     }
                     if(currentMove.getAlpha() > currentPredict.getBeta()){
                         return current;
                     }
-                    
                 }
             }
-            // cout <<endl;
         }
-        // cout << "min : " << current.getRow() << ", " << current.getCol() << endl;
-        return current;
     }
-        // return min(minimax(depth+1, nodeIndex*2, true, scores, h), minimax(depth+1, nodeIndex*2 + 1, true, scores, h)); 
+    return current;
 }
 
-/*********************************************************************/
-
-bool checkNewGame(Board board){
+bool isNewGame(Board board){
     for(int i = 0 ; i < ROW ; i ++)
         for(int j = 0 ; j < COL; j++){
             if (board.get_orbs_num(i, j)!=0)
@@ -243,44 +216,99 @@ int checkAllTheSameColor(Board board){
         return 0;
     }
 }
-void getBoardValue(Board board){
-    /**
-    1. get the board information -> each orbs in the board and record it
-    **/
-    int i, j;
-    for (i=0; i <5; i++){
-        for (j=0;j<6;j++){
-            if (color == board.get_cell_color(i,j))
-                boardValue[i][j] = board.get_orbs_num(i, j);
-            else
-                boardValue[i][j] = board.get_orbs_num(i, j)* -1;
+float evaluateAround(Board board, int nextTurn, int row, int col){
+    int adjustX, adjustY, xBound, yBound;
+    adjustX = 1;
+    adjustY = 1;
+    xBound = 1;
+    yBound = 1;
+    float val =0.0;
+    char centerColor = board.get_cell_color(row,col);
+    int centerNum = board.get_orbs_num(row, col);
+    int centerCapacity = board.get_capacity(row, col);
+    int centerNumToExplosure = centerCapacity - centerNum;
+    bool isCenterColorNextTrun;
+    if (centerColor == color){
+        if(nextTurn == 1){
+            isCenterColorNextTrun = false;
+        }
+        else{
+            isCenterColorNextTrun = true;
         }
     }
+    else {
+        if(nextTurn == 1){
+            isCenterColorNextTrun = true;
+        }
+        else{
+            isCenterColorNextTrun = false;
+        }
+    }
+    for (int v = -yBound; v != yBound + adjustY; ++v) {
+        for (int u = -xBound; u != xBound + adjustX; ++u) {
+            if (col + u >= 0 && col + u < COL && row + v >= 0 && row + v < ROW) {
+                if(board.get_cell_color(row+v, col+u) =='w') {
+                    continue;
+                }
+                else{
+                    char currentColor = board.get_cell_color(row+v, col+u);
+                    float currentNum = board.get_orbs_num(row+v, col+u);
+                    float currentCapacity = board.get_capacity(row+v, col+u);
+                    float currentNumToExplosure = currentCapacity - currentNum;
+                    if (currentColor == centerColor){
+                        if (0 == v+u){ //center
+                            continue;
+                        }
+                        else if(0 == (v+u)%2) {//coner
+                            val += 0.01;
+                        }
+                        else{ //edge
+                            val -= 0.01;
+                        }
+                    }
+                    else{
+                        if(0 == (v+u)%2) {//coner
+                            val -= 0.01;
+                        }
+                        else{ //edge
+                            if(currentNumToExplosure < centerNumToExplosure){
+                                val -= (float)centerNum * 0.05* currentNumToExplosure/(currentCapacity-1);
+                            }
+                            else if(currentNumToExplosure == centerNumToExplosure){
+                                if (isCenterColorNextTrun){
+                                    val += (float)currentNum *0.05 * centerNumToExplosure/(centerCapacity-1);
+                                }
+                                else{
+                                    val -= (float)centerNum *0.05 * currentNumToExplosure/(currentCapacity-1);
+                                }
+                            }
+                            else{
+                                val += (float)currentNum * 0.05 * centerNumToExplosure/(centerCapacity-1);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if (centerColor == color)
+        return val; 
+    else
+        return -val;
 }
 
-
-float evaluate(Board board){ //O(n)
-    //Note: this algo can speed up, by adding a visited flag. 
-    //because most of time the board doesn't change too much/
-    /****
-    2. valudate the board (only)
-        A. the total num_orbs in the board, if it is yours, then get a point, if not, reduce a point
-        B. count the ability to change color: num_orbs/(capacity - 1)
-            the ATCC point = 0.1~0.01 ???
-            value += color * ATCC_point * ability_to_change_color(ATCC) * capacity
-        C. if orbs nums are more than the enermy surround, then get more point 
-    ****/
+float evaluate(Board board, int nextTurn){ //O(n)
     int i, j;
     float value =0;
-    float ATCCP = 0.3; //the given point for ability to change color 
-    float ATCC ;
+    float ATCCP = 0.3;
+    float ATCC ; //the given point for ability to change color 
     for (i=0; i <5; i++){
         for (j=0;j<6;j++){
             int orbNum = board.get_orbs_num(i,j);
             int cellCapacity = board.get_capacity(i,j);
             int sameColor;
             if (board.get_cell_color(i,j)=='w'){
-                sameColor = 0;
+                continue;
             }
             else if (board.get_cell_color(i,j)==color){
                 sameColor = 1;
@@ -288,102 +316,33 @@ float evaluate(Board board){ //O(n)
             else{
                 sameColor = -1;
             }
-            
-            ATCC = float(orbNum)/(cellCapacity-1); //ability to change color;
-            // if ((orbNum*sameColor)!=0)
-                // cout <<  " at " << i << ", " << j << ": sameColor * (orbNum + ATCCP* ATCC * cellCapacity) = " << sameColor <<"* (" << orbNum << "+ " << ATCCP << "* " << ATCC << "*" << cellCapacity << ")= " <<sameColor * (orbNum + ATCCP* ATCC * cellCapacity) << endl;
-            
+            ATCC = float(orbNum)/(cellCapacity-1); //ability to change color; corner:+1, edge:1/2, center: 1/3
             value += float(sameColor) * (orbNum + ATCCP* ATCC * cellCapacity); // A. B. evaluate the atcc
-            
-            //evaluate surround
-            if (i!=0){// look up
-                if(orbNum > board.get_orbs_num(i -1,j)){
-                    value += sameColor * board.get_orbs_num(i -1,j) *ATCCP * ATCC;
-                }
-            }
-            if (i!=5){ //look down
-                if(orbNum > board.get_orbs_num(i +1,j)){
-                    value +=sameColor *  board.get_orbs_num(i +1,j) *ATCCP * ATCC;
-                }
-            }
-            if(j!=0){ //look left
-                if(orbNum > board.get_orbs_num(i,j -1)){
-                    value +=sameColor *  board.get_orbs_num(i ,j-1) *ATCCP * ATCC;
-                }
-            }
-            if (j!=6){ //look right
-                if(orbNum > board.get_orbs_num(i,j+1)){
-                    value +=sameColor *  board.get_orbs_num(i ,j+1) *ATCCP * ATCC;
-                }
-            }
-
+            //  orbNum + 0.3 * (corner = 2, edge =3/2, center= 4/3) = (corner: 1.6, edge 1.45, center 1.4)
+            //evaluate Around
+            value +=  evaluateAround(board, nextTurn, i, j);;
         }
     }
     return value;
 }
 
-
+void placeCorner(int index[]){
+    srand(time(NULL));  
+    index[0] = (ROW-1)* (rand() % 2);
+    index[1] = (COL-1)* (rand() % 2);
+}
 
 void algorithm_A(Board board, Player player, int index[]){
-    int h = 4;
-    // cout << board.get_capacity(0, 0) << endl;
-    // cout << board.get_orbs_num(0, 0) << endl;
-    // cout << board.get_cell_color(0, 0) << endl;
-    // board.print_current_board(0, 0, 0);
-
-    //////////// Random Algorithm ////////////
-    // Here is the random algorithm for your reference, you can delete or comment it.
-    srand(time(NULL));
-    int row, col;
-    float score;
+    int h=4;
     color = player.get_color();
-    // cout << player.get_color() << endl;
     int i; int j;
-    // Board boardForPredict = board;
-
-    if (checkNewGame(board)){
-        row = 5* rand() % 2;
-        col = 6* rand() % 2;
+    if (isNewGame(board)){   
+        placeCorner(index);
     }
     else{
         gameMove Next;
-        Next = minimax(Next, true, board, 1, h);
-        row = Next.getRow();
-        col = Next.getCol();
-        score = Next.getScore();
+        Next = minmax(Next, true, board, 1, h);
+        index[0] = Next.getRow();
+        index[1] = Next.getCol();
     }
-
-    
-    
-    index[0] = row;
-    index[1] = col;
-    
-    // cout << "next: " << row <<", " << col << " Score = " << score << endl;
-    //system("pause");
 }
-// */
-
-/*
-void algorithm_A(Board board, Player player, int index[]){
-
-    // cout << board.get_capacity(0, 0) << endl;
-    // cout << board.get_orbs_num(0, 0) << endl;
-    // cout << board.get_cell_color(0, 0) << endl;
-    // board.print_current_board(0, 0, 0);
-
-    //////////// Random Algorithm ////////////
-    // Here is the random algorithm for your reference, you can delete or comment it.
-    srand(time(NULL));
-    int row, col;
-    color = player.get_color();
-    cout << "Now value = " << evaluate(board) << endl;
-    while(1){
-        row = rand() % 5;
-        col = rand() % 6;
-        if(board.get_cell_color(row, col) == color || board.get_cell_color(row, col) == 'w') break;
-    }
-
-    index[0] = row;
-    index[1] = col;
-}
-*/

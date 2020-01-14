@@ -32,9 +32,10 @@ void algorithm_C(Board board, Player player, int index[]){
     for(int i=0;i<ROW;i++){
         for(int j=0;j<COL;j++){
             if(board.get_cell_color(i,j)==color){
-                if( (board.get_capacity(i,j)-board.get_orbs_num(i,j))<=orbLack )
+                if( (board.get_capacity(i,j)-board.get_orbs_num(i,j))<=orbLack ){
                     row=i;
                     col=j;
+                }
             }
         }
     }
